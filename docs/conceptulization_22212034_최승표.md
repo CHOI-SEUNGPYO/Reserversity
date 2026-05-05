@@ -43,7 +43,7 @@
 
 ## 2. System context diagram
 <div align="center">
-  <img src="img/Diagram/ContextDaiagram.png">
+  <img src="img/diagram/ContextDaiagram.png">
   <p><em>&lt;그림 1&gt; Use Case Diagram</em></p>
 </div>
 

@@ -42,6 +42,11 @@
 - 관리 행정 업무 효율을 높이고자 하는 교육 기관 등
 
 ## 2. System context diagram
+<div align="center">
+  <img src="img/Diagram/ContextDaiagram.png">
+  <p><em>&lt;그림 1&gt; Use Case Diagram</em></p>
+</div>
+
 ### 2.1. Descroption for the terms in the diagram
 - **Reserversity** 본 프로젝트의 개발 대상이 되는 핵심 개발자용 데스크톱 애플리케이션이다. 학과 사무실 내에서 구동되며 공간 대관, 장비 대여, 예외 처리 및 권한 관리 등 자원 관리에 필요한 모든 비즈니스 로직을 처리하는 중앙 시스템에다.
 - **Admin(User)** 시스템을 직접 조작하는 주 사용자를 의미한다. 로그인 과정을 거쳐 시스템 대시보드에 접근하며, 자원 검색, 예약 입력, 권한 설정 등의 관리 업무를 수행한다.

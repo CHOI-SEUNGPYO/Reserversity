@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    participant Service as : ReservationService
+    participant UserRepo as : UserRepository
+    participant User as : User
+
+    Note over Service: 상위 유스케이스로부터 userId 전달받음
+    
+    Service->>UserRepo: findById(userId)
+    activate UserRepo
+    UserRepo-->>Service: User 객체 반환
+    deactivate UserRepo
+    
+    %% 제재 여부 검증 (날짜 기반 로직)
+    Service->>User: isSuspended(currentDate)
+    activate User
+    User-->>Service: boolean 결과 반환 (true: 제재 중, false: 정상)
+    deactivate User
+    
+    alt [제재 중인 경우 (Extension 3a)]
+        Service-->>Service: 제재 예외(PenaltyException) 발생
+        Note right of Service: 상위 로직으로 예외 전파 (차단)
+        
+    else [시스템 오류 시 (Extension 2a)]
+        Service-->>Service: 시스템 오류 발생
+        Note right of Service: 상위 로직으로 에러 전파 (차단)
+        
+    else [정상인 경우 (Main Success)]
+        Service->>Service: 검증 완료 (다음 단계로 진행)
+    end

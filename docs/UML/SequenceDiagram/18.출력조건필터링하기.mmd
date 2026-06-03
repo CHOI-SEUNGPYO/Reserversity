@@ -1,0 +1,24 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as : ReservationUI
+    participant Service as : ExportService
+    participant Repo as : ReservationRepository
+
+    Admin->>UI: '출력' 버튼 클릭
+    Note over UI: 현재 화면에 적용된<br>필터(filterDto) 유지 중
+    
+    UI->>Service: exportData(format, filterDto)
+    activate Service
+    
+    Service->>Repo: findAllByFilter(filterDto)
+    activate Repo
+    Repo-->>Service: 필터링된 데이터 반환
+    deactivate Repo
+    
+    Service->>Service: 포맷 변환 (Strategy Pattern 적용)
+    
+    Service-->>UI: 파일 스트림 반환
+    deactivate Service
+    
+    UI-->>Admin: 파일 다운로드 시작

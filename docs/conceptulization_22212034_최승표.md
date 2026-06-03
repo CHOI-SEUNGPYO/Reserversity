@@ -44,7 +44,7 @@
 
 ## 2. System context diagram
 <div align="center">
-  <img src="img/diagram/ContextDaiagram.png">
+  <img src="https://github.com/CHOI-SEUNGPYO/Reserversity/blob/main/docs/img/diagram/ContextDaiagram.png?raw=true">
   <p><em>&lt;그림 1&gt; Use Case Diagram</em></p>
 </div>
 

@@ -1,0 +1,71 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Export)
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Dialog as Electron dialog
+    participant RRepo as PrismaReservationRepository
+    participant CRepo as PrismaCategoryRepository
+    participant FS as Node.js fs
+    participant DB as SQLite DB
+
+    Admin->>UI: '내보내기(Export)' 사이드바 메뉴 클릭
+    activate UI
+    UI-->>Admin: 내보내기 설정 화면 렌더링 (카테고리 필터, 미리보기 테이블)
+
+    Admin->>UI: '데이터 내보내기 (CSV)' 버튼 클릭
+    UI->>Preload: invoke('reservation:export')
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+
+    IPC->>Dialog: dialog.showSaveDialog({ title, defaultPath: 'reservations.csv', filters: [csv] })
+    activate Dialog
+    Dialog-->>Admin: 로컬 파일 저장 탐색기(Save Dialog) 팝업 출력
+    Admin->>Dialog: 저장 경로 선택 후 '저장' 클릭
+    Dialog-->>IPC: { canceled: false, filePath: '/path/to/reservations.csv' }
+    deactivate Dialog
+
+    IPC->>UC: listReservations()
+    activate UC
+    UC->>RRepo: findAll()
+    activate RRepo
+    RRepo->>DB: prisma.reservation.findMany()
+    activate DB
+    DB-->>RRepo: Reservation[] 반환
+    deactivate DB
+    RRepo-->>UC: Reservation[] 반환
+    deactivate RRepo
+    UC-->>IPC: Reservation[] 반환
+    deactivate UC
+
+    IPC->>UC: category.findAll()
+    activate UC
+    UC->>CRepo: findAll()
+    activate CRepo
+    CRepo->>DB: prisma.category.findMany()
+    activate DB
+    DB-->>CRepo: Category[] 반환
+    deactivate DB
+    CRepo-->>UC: Category[] 반환
+    deactivate CRepo
+    UC-->>IPC: Category[] 반환
+    deactivate UC
+
+    Note over IPC: CSV 헤더 + 각 예약 행 생성\nr.category(숫자 ID) → 카테고리 한글명 매핑
+    Note over IPC: csv = "ID,카테고리,자원명,...\n" + 각 row 데이터
+
+    IPC->>FS: fs.writeFileSync(filePath, '\uFEFF' + csv, 'utf8')
+    activate FS
+    Note over FS: BOM(\uFEFF) 선두 삽입으로 Excel 한글 인코딩 깨짐 방지
+    FS-->>IPC: 파일 저장 완료
+    deactivate FS
+
+    IPC-->>Preload: { success: true, filePath }
+    deactivate IPC
+    Preload-->>UI: Promise Resolve
+    deactivate Preload
+    UI-->>Admin: "내보내기 완료: /path/reservations.csv" 성공 알림 출력
+    deactivate UI

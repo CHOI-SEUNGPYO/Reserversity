@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Dashboard / Export)
+    participant Context as ReservationContext
+    participant State as React Local State
+
+    Admin->>UI: 대시보드 또는 내보내기 화면 상단의 카테고리 셀렉트 변경
+    activate UI
+    UI->>State: setSelectedCategory(categoryId) — 선택 카테고리 상태 갱신
+    activate State
+    State-->>UI: selectedCategory 업데이트
+    deactivate State
+
+    UI->>Context: useReservations() — 전체 예약 데이터 가져오기
+    activate Context
+    Context-->>UI: reservations[] (전체 캐싱된 예약)
+    deactivate Context
+
+    Note over UI: 프론트엔드 전용 필터링 (추가 IPC 호출 없음)
+
+    UI->>UI: 자원 컬럼 재구성\n— 선택 카테고리에 속한 자원만 가로축(Column) 배열
+    UI->>UI: 예약 블록 필터링\n— 해당 자원들의 예약만 타임테이블에 출력
+    UI->>UI: 내보내기 미리보기 테이블 필터링\n— 동일 조건의 최근 5건만 추출 렌더링
+
+    UI-->>Admin: 필터가 적용된 자원 컬럼 + 예약 데이터 화면 갱신
+    deactivate UI

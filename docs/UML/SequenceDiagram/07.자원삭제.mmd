@@ -5,33 +5,31 @@ sequenceDiagram
     participant Preload as electronAPI
     participant IPC as IPC Main (setupIpcHandlers)
     participant UC as AppUseCases
-    participant Repo as PrismaCategoryRepository
+    participant Repo as PrismaResourceRepository
     participant DB as SQLite DB
 
-    Admin->>UI: 카테고리 카드의 '삭제(Trash)' 아이콘 클릭
+    Admin->>UI: 자원 카드의 '삭제(Trash)' 아이콘 클릭
     activate UI
     UI-->>Admin: 삭제 확인 대화상자 출력
     Admin->>UI: '확인' 버튼 클릭
-    UI->>Preload: invoke('category:delete', categoryId)
+    UI->>Preload: invoke('resource:delete', resourceId)
     activate Preload
     Preload->>IPC: IPC 채널 전송
     activate IPC
-
-    IPC->>UC: resource.findByCategory(categoryId)
-    activate UC
-    UC-->>IPC: 카테고리 내 자원 목록(resourceIds) 반환
-    deactivate UC
 
     IPC->>UC: listReservations()
     activate UC
     UC-->>IPC: 전체 예약 목록 반환
     deactivate UC
 
-    alt 오늘 이후 미래 예약이 1건 이상 존재할 경우
+    Note over IPC: resourceReservations = 해당 resourceId 필터링
+    Note over IPC: futureReservations = dateStr >= 오늘인 예약만 분류
+
+    alt 미래 예약이 1건 이상 존재할 경우
         IPC-->>Preload: { success: false, error: "X건의 예약이 남아있습니다..." }
         Preload-->>UI: Promise Resolve (실패)
         UI-->>Admin: 에러 알림창 출력 — 삭제 차단
-    else 미래 예약이 없는 경우
+    else 미래 예약이 없는 경우 (과거 이력만 존재)
         loop 과거 예약마다 resourceId Unlink 처리
             IPC->>UC: updateReservation(id, { ...data, resourceId: null })
             activate UC
@@ -41,11 +39,11 @@ sequenceDiagram
             deactivate DB
             deactivate UC
         end
-        IPC->>UC: category.delete(categoryId)
+        IPC->>UC: resource.delete(resourceId)
         activate UC
-        UC->>Repo: delete(categoryId)
+        UC->>Repo: delete(resourceId)
         activate Repo
-        Repo->>DB: prisma.resource.deleteMany + prisma.category.delete
+        Repo->>DB: prisma.resource.delete({ where: { id } })
         activate DB
         DB-->>Repo: 삭제 완료
         deactivate DB
@@ -57,7 +55,7 @@ sequenceDiagram
         deactivate IPC
         Preload-->>UI: Promise Resolve
         deactivate Preload
-        UI->>UI: 카테고리 목록 갱신
-        UI-->>Admin: 카테고리 카드 제거 및 화면 갱신
+        UI->>UI: 자원 목록 갱신
+        UI-->>Admin: 자원 카드 제거 및 화면 갱신
         deactivate UI
     end

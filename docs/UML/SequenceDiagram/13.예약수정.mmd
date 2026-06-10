@@ -1,0 +1,66 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Dashboard)
+    participant Modal as 예약 상세 모달
+    participant Drawer as NewReservationDrawer
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaReservationRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: 타임테이블의 예약 블록 클릭
+    activate UI
+    UI-->>Admin: 예약 상세 정보 모달 팝업 출력
+    activate Modal
+
+    alt 반복 예약(groupId 보유)인 경우
+        Modal-->>Admin: '단일 수정' / '전체 수정' 버튼 노출
+        Admin->>Modal: 수정 범위 선택 클릭
+    end
+
+    Modal->>Drawer: 기존 예약 데이터 + updateGroup 플래그를 넣어 Drawer 오픈
+    deactivate Modal
+    activate Drawer
+    Drawer-->>Admin: 기존 데이터가 Pre-fill된 예약 수정 폼 렌더링
+
+    Admin->>Drawer: 예약 정보 수정 후 '수정하기' 버튼 클릭
+    Drawer->>Preload: invoke('reservation:update', { id, data, updateGroup })
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: updateReservation(id, data, updateGroup)
+    activate UC
+
+    alt updateGroup=true이고 data.groupId 존재
+        UC->>Repo: updateGroup(groupId, data)
+        activate Repo
+        Repo->>DB: prisma.reservation.updateMany({ where: { groupId }, data })
+        activate DB
+        DB-->>Repo: 갱신된 Reservation[] 반환
+        deactivate DB
+        Repo-->>UC: 완료
+        deactivate Repo
+    else 단일 수정 (updateGroup=false)
+        UC->>Repo: update(id, data)
+        activate Repo
+        Repo->>DB: prisma.reservation.update({ where: { id }, data })
+        activate DB
+        DB-->>Repo: 갱신된 Reservation 반환
+        deactivate DB
+        Repo-->>UC: 완료
+        deactivate Repo
+    end
+
+    UC-->>IPC: 결과 반환
+    deactivate UC
+    IPC-->>Preload: { success: true }
+    deactivate IPC
+    Preload-->>Drawer: Promise Resolve
+    deactivate Preload
+    Drawer->>Drawer: onClose() — Drawer 닫기
+    deactivate Drawer
+    UI->>UI: 예약 목록 갱신 및 타임테이블 리렌더링
+    UI-->>Admin: 수정 사항 반영 완료
+    deactivate UI

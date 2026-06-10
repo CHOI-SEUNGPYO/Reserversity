@@ -1,30 +1,40 @@
 sequenceDiagram
     autonumber
-    participant Service as : ReservationService
-    participant UserRepo as : UserRepository
-    participant User as : User
+    participant UC as AppUseCases
+    participant PRepo as PrismaPenaltyRepository
+    participant DB as SQLite DB
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UI as React UI (Drawer)
+    actor Admin as 관리자
 
-    Note over Service: 상위 유스케이스로부터 userId 전달받음
-    
-    Service->>UserRepo: findById(userId)
-    activate UserRepo
-    UserRepo-->>Service: User 객체 반환
-    deactivate UserRepo
-    
-    %% 제재 여부 검증 (날짜 기반 로직)
-    Service->>User: isSuspended(currentDate)
-    activate User
-    User-->>Service: boolean 결과 반환 (true: 제재 중, false: 정상)
-    deactivate User
-    
-    alt [제재 중인 경우 (Extension 3a)]
-        Service-->>Service: 제재 예외(PenaltyException) 발생
-        Note right of Service: 상위 로직으로 예외 전파 (차단)
-        
-    else [시스템 오류 시 (Extension 2a)]
-        Service-->>Service: 시스템 오류 발생
-        Note right of Service: 상위 로직으로 에러 전파 (차단)
-        
-    else [정상인 경우 (Main Success)]
-        Service->>Service: 검증 완료 (다음 단계로 진행)
+    Note over UC: reservation:create IPC 수신 후\ncreateReservation(data, forceApprove) 실행
+
+    alt forceApprove=false이고 authorId가 존재할 경우
+        UC->>PRepo: findByStudentId(authorId)
+        activate PRepo
+        PRepo->>DB: prisma.penalty.findUnique({ where: { studentId: authorId } })
+        activate DB
+        DB-->>PRepo: Penalty 레코드 반환 (또는 null)
+        deactivate DB
+        PRepo-->>UC: Penalty 반환
+        deactivate PRepo
+
+        alt Penalty 존재 && penalty.endDate >= 오늘 (YYYY-MM-DD 문자열 비교)
+            UC-->>IPC: throw Error("예약 차단: authorId는 endDate까지 제재 상태. (사유: reason)")
+            IPC-->>UI: { success: false, error: "예약 차단..." }
+            UI-->>Admin: 경고 confirm 팝업 출력\n"강제 승인하시겠습니까?"
+
+            alt 관리자가 강제 승인(Yes)
+                Admin->>UI: '예' 선택
+                UI->>IPC: reservation:create (data, forceApprove=true)
+                Note over UC: forceApprove=true → 제재 검증 건너뜀 → 예약 생성 진행
+            else 관리자가 거부(No)
+                Admin->>UI: '아니오' 선택
+                Note over UI: 예약 등록 취소 — Drawer 유지
+            end
+        else Penalty 없음 또는 endDate < 오늘 (만료된 제재)
+            Note over UC: 제재 검증 통과 → 예약 생성 로직 계속 진행
+        end
+    else forceApprove=true인 경우
+        Note over UC: 제재 검증 단계 완전 건너뜀 → 즉시 예약 생성
     end

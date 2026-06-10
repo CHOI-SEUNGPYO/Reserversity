@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant Page as React UI (NewResource)
+    participant State as React Local State
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant DB as SQLite DB
+
+    Admin->>Page: 자원 등록/수정 페이지에서 '+ 컬럼 추가' 버튼 클릭
+    activate Page
+    Page->>State: customFields 배열에 { name: '', value: '' } 항목 추가
+    activate State
+    State-->>Page: 새로운 입력 필드 행 렌더링
+    deactivate State
+    Page-->>Admin: 속성명(Key)과 기본값(Value) 입력 필드 출력
+
+    Admin->>Page: 속성명과 값을 필드에 입력
+    opt 추가 컬럼이 더 필요한 경우
+        Admin->>Page: '+ 컬럼 추가' 반복 클릭 및 입력
+    end
+    opt 잘못된 컬럼을 삭제하고 싶은 경우
+        Admin->>Page: 특정 컬럼 우측 '삭제(Trash)' 아이콘 클릭
+        Page->>State: 해당 인덱스의 customFields 항목 제거
+        State-->>Page: 해당 입력 행 삭제 렌더링
+    end
+
+    Admin->>Page: '등록하기' 또는 '수정하기' 버튼 클릭 (최종 저장)
+    Note over Page: JSON.stringify(customFields) — 배열을 JSON 문자열로 직렬화
+    Page->>Preload: invoke('resource:create' or 'resource:update', { ..., customFields: JSON문자열 })
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    IPC->>DB: prisma.resource.create/update({ customFields: JSON문자열 })
+    activate DB
+    DB-->>IPC: 저장 완료
+    deactivate DB
+    IPC-->>Preload: { success: true }
+    Preload-->>Page: Promise Resolve
+    deactivate Preload
+    Page->>Page: navigate('/resources')
+    deactivate Page

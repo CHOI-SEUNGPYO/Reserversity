@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Permissions)
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaPenaltyRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: 제재 관리 화면에서 '+ 제재 등록' 버튼 클릭
+    activate UI
+    UI-->>Admin: 목록 상단에 인라인 제재 입력 폼 활성화
+
+    Admin->>UI: 성명, 학번, 제재 사유, 제재 종료일(endDate) 입력 후 '등록 완료' 클릭
+    UI->>Preload: invoke('penalty:create', { name, studentId, reason, endDate })
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: penalty.create({ name, studentId, reason, endDate })
+    activate UC
+    UC->>DB: prisma.user.upsert({ where: { studentId }, create/update: { studentId, name } })
+    activate DB
+    Note over DB: 학번에 해당하는 User 레코드가 없으면 자동 생성(Upsert)
+    DB-->>UC: User 반환
+    deactivate DB
+    UC->>Repo: create({ name, studentId, reason, endDate })
+    activate Repo
+    Repo->>DB: prisma.penalty.upsert({ where: { studentId }, create/update: {...} })
+    activate DB
+    DB-->>Repo: 생성/갱신된 Penalty 레코드 반환
+    deactivate DB
+    Repo-->>UC: Penalty 반환
+    deactivate Repo
+    UC-->>IPC: 결과 반환
+    deactivate UC
+    IPC-->>Preload: { success: true, data }
+    deactivate IPC
+    Preload-->>UI: Promise Resolve
+    deactivate Preload
+    UI->>UI: 제재 목록 테이블 갱신
+    UI-->>Admin: 신규 제재 행 즉시 추가 렌더링
+    deactivate UI

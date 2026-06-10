@@ -1,0 +1,37 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Permissions)
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaPenaltyRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: '+ 제재 등록' 클릭 후 기존 대상자의 동일 학번 기재
+    activate UI
+    Admin->>UI: 변경할 사유와 새로운 종료일(endDate) 입력 후 '등록 완료' 클릭
+    UI->>Preload: invoke('penalty:create', { name, studentId, reason, endDate })
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: penalty.create({ studentId, reason, endDate })
+    activate UC
+    UC->>Repo: create (Upsert by studentId)
+    activate Repo
+    Repo->>DB: prisma.penalty.upsert({ where: { studentId }, update: { reason, endDate } })
+    activate DB
+    Note over DB: studentId가 이미 존재하면 기존 레코드의 사유/종료일만 덮어씀(Upsert)
+    DB-->>Repo: 갱신된 Penalty 레코드 반환
+    deactivate DB
+    Repo-->>UC: Penalty 반환
+    deactivate Repo
+    UC-->>IPC: 결과 반환
+    deactivate UC
+    IPC-->>Preload: { success: true, data }
+    deactivate IPC
+    Preload-->>UI: Promise Resolve
+    deactivate Preload
+    UI->>UI: 제재 목록 테이블 갱신
+    UI-->>Admin: 변경된 제재 정보 즉시 반영
+    deactivate UI

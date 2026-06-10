@@ -1,0 +1,37 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Permissions)
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaPenaltyRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: 제재 목록에서 대상자의 '제재 해제(Trash)' 아이콘 클릭
+    activate UI
+    UI-->>Admin: 해제 확인 대화상자 출력
+    Admin->>UI: '확인' 버튼 클릭
+    UI->>Preload: invoke('penalty:delete', penaltyId)
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: penalty.delete(penaltyId)
+    activate UC
+    UC->>Repo: delete(penaltyId)
+    activate Repo
+    Repo->>DB: prisma.penalty.delete({ where: { id } })
+    activate DB
+    DB-->>Repo: 삭제 완료
+    deactivate DB
+    Repo-->>UC: 완료
+    deactivate Repo
+    UC-->>IPC: 완료
+    deactivate UC
+    IPC-->>Preload: { success: true }
+    deactivate IPC
+    Preload-->>UI: Promise Resolve
+    deactivate Preload
+    UI->>UI: 제재 목록에서 해당 행 제거
+    UI-->>Admin: 제재 해제 완료 — 정상 권한 복구됨
+    deactivate UI

@@ -1,70 +1,48 @@
 sequenceDiagram
     autonumber
     actor Admin as 관리자
-    participant UI as : ResourceManagementUI
-    participant Modal as : ResourceModalUI
-    participant Service as : ResourceService
-    participant Repo as : ResourceRepository
-    participant Entity as : Resource
+    participant UI as React UI (Resources)
+    participant Page as React UI (NewResource /resources/new)
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaResourceRepository
+    participant DB as SQLite DB
 
-    Admin->>UI: '+ 신규 자원' 버튼 클릭
+    Admin->>UI: '+ 자원 추가' 버튼 클릭
     activate UI
-    UI->>Modal: open()
-    activate Modal
-    Modal-->>Admin: 자원 추가 팝업 렌더링
-    
-    Admin->>Modal: 기본 정보(명칭, 카테고리 등) 입력
-    
-    %% Extension Point: 조건부(선택적) 실행 영역
-    opt [사용자 정의 컬럼 추가 (Step 4)]
-        Admin->>Modal: '+ 필드 추가' 및 동적 속성 값 입력
+    UI->>Page: navigate('/resources/new')
+    deactivate UI
+    activate Page
+    Page-->>Admin: 자원 등록 페이지 렌더링
+
+    Admin->>Page: 자원명, 카테고리, 상태, 설명 입력
+    opt 사용자 정의 컬럼 추가 (Extension Point)
+        Admin->>Page: '+ 컬럼 추가' 클릭 → 속성명/값 입력
     end
-    
-    Admin->>Modal: '저장' 버튼 클릭 (submit)
-    
-    %% 1차 검증: UI 계층 (필수값 누락)
-    alt [필수 값 누락 시 (Extension 6a)]
-        Modal-->>Admin: 입력 필드 강조 및 경고 출력 ("필수 항목을 입력해 주세요")
-        
-    else [필수 값 정상 입력 시]
-        Modal->>Service: addResource(ResourceDto)
-        activate Service
-        
-        %% 2차 검증: DB 계층 (중복 이름 확인)
-        Service->>Repo: existsByNameAndCategoryId(name, categoryId)
-        activate Repo
-        Repo-->>Service: 검증 결과 반환 (boolean 또는 예외)
-        deactivate Repo
-        
-        alt [DB 연결 오류 시 (Extension 6c)]
-            Service-->>Modal: 시스템 오류 예외 반환
-            Modal-->>Admin: 메시지 출력 ("시스템 오류로 자원 등록에 실패했습니다")
-            
-        else [동일 카테고리 내 이름 중복 시 (Extension 6b)]
-            Service-->>Modal: 중복 예외 반환
-            Modal-->>Admin: 경고 출력 ("해당 카테고리에 이미 같은 이름의 자원이 존재합니다")
-            
-        else [정상 등록 가능 시 (Main Success)]
-            %% 엔티티 생성 (커스텀 필드 포함) 및 영속화
-            Service->>Entity: create(name, categoryId, description, customFields)
-            activate Entity
-            Entity-->>Service: Resource 객체 반환
-            deactivate Entity
-            
-            Service->>Repo: save(resource)
-            activate Repo
-            Repo-->>Service: 저장된 객체 반환
-            deactivate Repo
-            
-            Service-->>Modal: 생성된 자원 ID 반환
-            deactivate Service
-            
-            Modal->>Modal: displaySuccess()
-            Modal-->>UI: 모달 닫기 및 갱신 알림
-            deactivate Modal
-            
-            UI->>UI: renderResourceList()
-            UI-->>Admin: 자원 목록 테이블 출력 (신규 항목 노출)
-            deactivate UI
-        end
-    end
+
+    Admin->>Page: '등록하기' 버튼 클릭
+    Note over Page: customFields 배열을 JSON.stringify()로 직렬화
+    Page->>Preload: invoke('resource:create', { name, categoryId, status, customFields })
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: resource.create({ name, categoryId, status, customFields })
+    activate UC
+    UC->>Repo: create({ name, categoryId, status, customFields })
+    activate Repo
+    Repo->>DB: prisma.resource.create({ data })
+    activate DB
+    DB-->>Repo: 생성된 Resource 레코드 반환
+    deactivate DB
+    Repo-->>UC: Resource 반환
+    deactivate Repo
+    UC-->>IPC: 결과 반환
+    deactivate UC
+    IPC-->>Preload: { success: true, data }
+    deactivate IPC
+    Preload-->>Page: Promise Resolve
+    deactivate Preload
+    Page->>Page: navigate('/resources')
+    deactivate Page
+    Note over Page: 자원 목록 페이지로 자동 복귀

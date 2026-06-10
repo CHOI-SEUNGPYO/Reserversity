@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Resources)
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaCategoryRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: 자원 관리(Resources) 페이지 진입
+    activate UI
+    UI->>Preload: invoke('category:list')
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: category.findAll()
+    activate UC
+    UC->>Repo: findAll()
+    activate Repo
+    Repo->>DB: prisma.category.findMany({ include: { resources: true } })
+    activate DB
+    DB-->>Repo: Category[] 반환
+    deactivate DB
+    Repo-->>UC: Category[] 반환
+    deactivate Repo
+    UC-->>IPC: 결과 반환
+    deactivate UC
+    IPC-->>Preload: { success: true, data: Category[] }
+    deactivate IPC
+    Preload-->>UI: Promise Resolve
+    deactivate Preload
+    UI->>UI: 카테고리별 자원 카드 목록 렌더링
+    UI-->>Admin: 카테고리 카드 목록 화면 출력
+    deactivate UI

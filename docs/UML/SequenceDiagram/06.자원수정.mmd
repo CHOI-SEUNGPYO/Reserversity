@@ -1,0 +1,49 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Resources)
+    participant Page as React UI (NewResource /resources/new?edit=[id])
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaResourceRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: 자원 카드의 '수정(Pencil)' 아이콘 클릭
+    activate UI
+    UI->>Page: navigate('/resources/new?edit=[resourceId]')
+    deactivate UI
+    activate Page
+    Page->>Preload: invoke('resource:list', categoryId) [기존 데이터 로드]
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    IPC-->>Preload: { success: true, data: Resource }
+    deactivate Preload
+    Page-->>Admin: 기존 데이터가 Pre-fill된 수정 페이지 렌더링
+
+    Admin->>Page: 정보 수정 (자원명, 상태, 사용자 정의 컬럼 등)
+    Admin->>Page: '수정하기' 버튼 클릭
+    Note over Page: 수정된 customFields 배열을 JSON.stringify()로 직렬화
+    Page->>Preload: invoke('resource:update', { id, data })
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: resource.update(id, data)
+    activate UC
+    UC->>Repo: update(id, data)
+    activate Repo
+    Repo->>DB: prisma.resource.update({ where: { id }, data })
+    activate DB
+    DB-->>Repo: 수정된 Resource 레코드 반환
+    deactivate DB
+    Repo-->>UC: Resource 반환
+    deactivate Repo
+    UC-->>IPC: 결과 반환
+    deactivate UC
+    IPC-->>Preload: { success: true, data }
+    deactivate IPC
+    Preload-->>Page: Promise Resolve
+    deactivate Preload
+    Page->>Page: navigate('/resources')
+    deactivate Page
+    Note over Page: 자원 목록 페이지로 자동 복귀

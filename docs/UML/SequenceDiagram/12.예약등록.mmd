@@ -1,0 +1,118 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Dashboard)
+    participant Drawer as NewReservationDrawer
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant PRepo as PrismaPenaltyRepository
+    participant RRepo as PrismaReservationRepository
+    participant DB as SQLite DB
+
+    %% 전체 시스템 UI/Drawer 활성화 (끝날 때까지 끄지 않음)
+    Admin->>UI: '+ 신규 예약' 클릭 또는 시간표 빈 슬롯 클릭
+    activate UI
+    UI->>Drawer: URL ?new=true 상태 변경으로 Drawer 슬라이드 오픈
+    activate Drawer
+    Drawer-->>Admin: 우측에서 슬라이드 아웃 방식으로 예약 폼 렌더링
+
+    Admin->>Drawer: 예약자명, 학번(optional), 카테고리, 자원, 날짜, 시간, 승인자 입력
+    opt 반복 예약 설정
+        Admin->>Drawer: '반복 예약 설정' 체크 → 반복 주기(daily/weekly/monthly), 종료일, 요일 선택
+    end
+
+    Admin->>Drawer: '등록하기' 버튼 클릭
+    Note over Drawer: 반복 예약이면 startDate~endDate 루프로<br/>공유 groupId(Date.now())를 가진 예약 배열 생성
+
+    %% API 호출 (충돌 방지를 위해 이 계층은 활성화 박스를 생략)
+    Drawer->>Preload: invoke('reservation:create', data_or_array, forceApprove=false)
+    Preload->>IPC: IPC 채널 전송
+    IPC->>UC: createReservation(data, forceApprove=false)
+
+    alt forceApprove=false이고 authorId가 입력된 경우
+        %% 해당 블록 안에서만 켜지고 꺼지므로 안전하게 작동
+        UC->>PRepo: findByStudentId(authorId)
+        activate PRepo
+        PRepo->>DB: prisma.penalty.findUnique()
+        activate DB
+        DB-->>PRepo: Penalty 레코드 반환
+        deactivate DB
+        PRepo-->>UC: Penalty 반환
+        deactivate PRepo
+
+        alt 제재 레코드 존재 && endDate >= 오늘 날짜
+            UC-->>IPC: throw Error("예약 차단: 제재 상태")
+            IPC-->>Preload: { success: false, error: "예약 차단..." }
+            Preload-->>Drawer: Promise Resolve (실패)
+
+            Drawer-->>Admin: "제재 상태입니다. 관리자 직권으로 강제 승인하시겠습니까?" confirm 팝업
+
+            alt 관리자가 강제 승인(예) 선택
+                Admin->>Drawer: '예' 클릭
+                Drawer->>Preload: invoke('reservation:create', data, forceApprove=true)
+                Preload->>IPC: IPC 채널 전송
+                IPC->>UC: createReservation(data, forceApprove=true)
+
+                Note over UC: forceApprove=true → 제재 검증 생략
+                UC->>RRepo: create(data) or createMany(data[])
+                activate RRepo
+                RRepo->>DB: prisma.reservation.create/createMany
+                activate DB
+                DB-->>RRepo: 생성된 Reservation 반환
+                deactivate DB
+                RRepo-->>UC: 완료
+                deactivate RRepo
+
+                UC-->>IPC: 결과 반환
+                IPC-->>Preload: { success: true }
+                Preload-->>Drawer: Promise Resolve
+
+                Drawer->>Drawer: onClose() — Drawer 닫기
+                UI->>UI: 예약 목록 갱신 및 타임테이블 리렌더링
+                UI-->>Admin: 강제 승인 완료 — 예약 확정 표시
+            else 관리자가 강제 승인 거부(아니오) 선택
+                Admin->>Drawer: '아니오' 클릭 — 예약 등록 취소
+                Drawer->>Drawer: onClose() — Drawer 닫기
+                UI-->>Admin: 예약 등록 취소 완료
+            end
+        else 제재 없음 또는 만료된 제재
+            UC->>RRepo: create(data) or createMany(data[])
+            activate RRepo
+            RRepo->>DB: prisma.reservation.create/createMany
+            activate DB
+            DB-->>RRepo: 생성된 Reservation 반환
+            deactivate DB
+            RRepo-->>UC: 완료
+            deactivate RRepo
+
+            UC-->>IPC: 결과 반환
+            IPC-->>Preload: { success: true }
+            Preload-->>Drawer: Promise Resolve
+
+            Drawer->>Drawer: onClose() — Drawer 닫기
+            UI->>UI: 예약 목록 갱신 및 타임테이블 리렌더링
+            UI-->>Admin: 예약 등록 완료
+        end
+    else authorId 없는 일반 등록 (제재 검증 생략)
+        UC->>RRepo: create(data) or createMany(data[])
+        activate RRepo
+        RRepo->>DB: prisma.reservation.create/createMany
+        activate DB
+        DB-->>RRepo: 생성된 Reservation 반환
+        deactivate DB
+        RRepo-->>UC: 완료
+        deactivate RRepo
+
+        UC-->>IPC: 결과 반환
+        IPC-->>Preload: { success: true }
+        Preload-->>Drawer: Promise Resolve
+
+        Drawer->>Drawer: onClose() — Drawer 닫기
+        UI->>UI: 예약 목록 갱신 및 타임테이블 리렌더링
+        UI-->>Admin: 예약 등록 완료
+    end
+
+    %% 모든 작업이 완전히 끝난 맨 마지막에 일괄 종료
+    deactivate Drawer
+    deactivate UI

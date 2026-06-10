@@ -1,0 +1,70 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Dashboard)
+    participant Modal as 예약 상세 모달
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaReservationRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: 타임테이블의 예약 블록 클릭
+    activate UI
+    UI-->>Admin: 예약 상세 정보 모달 팝업 출력
+    activate Modal
+
+    alt 반복 예약(groupId 보유)인 경우
+        Modal-->>Admin: '단일 취소' / '전체 취소' 버튼 노출
+        Admin->>Modal: 취소 범위 선택 클릭
+    else 단일 예약인 경우
+        Admin->>Modal: '예약 취소' 버튼 클릭
+    end
+
+    Modal-->>Admin: 취소 확인 대화상자 출력
+    Admin->>Modal: '확인' 클릭
+    Modal->>Preload: invoke('reservation:delete', { id, deleteGroup })
+    deactivate Modal
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: deleteReservation(id, deleteGroup)
+    activate UC
+
+    alt deleteGroup=true인 경우
+        UC->>Repo: findById(id)
+        activate Repo
+        Repo->>DB: prisma.reservation.findUnique({ where: { id } })
+        activate DB
+        DB-->>Repo: Reservation (groupId 포함) 반환
+        deactivate DB
+        Repo-->>UC: groupId 확보
+        deactivate Repo
+        UC->>Repo: deleteGroup(groupId)
+        activate Repo
+        Repo->>DB: prisma.reservation.deleteMany({ where: { groupId } })
+        activate DB
+        DB-->>Repo: 그룹 전체 삭제 완료
+        deactivate DB
+        Repo-->>UC: 완료
+        deactivate Repo
+    else 단일 삭제 (deleteGroup=false)
+        UC->>Repo: delete(id)
+        activate Repo
+        Repo->>DB: prisma.reservation.delete({ where: { id } })
+        activate DB
+        DB-->>Repo: 삭제 완료
+        deactivate DB
+        Repo-->>UC: 완료
+        deactivate Repo
+    end
+
+    UC-->>IPC: 완료
+    deactivate UC
+    IPC-->>Preload: { success: true }
+    deactivate IPC
+    Preload-->>UI: Promise Resolve
+    deactivate Preload
+    UI->>UI: 예약 목록 갱신 및 타임테이블 빈 슬롯 리렌더링
+    UI-->>Admin: 예약 취소 완료 — 슬롯 해제
+    deactivate UI

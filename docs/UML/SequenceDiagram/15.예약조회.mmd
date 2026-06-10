@@ -1,0 +1,47 @@
+sequenceDiagram
+    autonumber
+    actor Admin as 관리자
+    participant UI as React UI (Dashboard)
+    participant Context as ReservationContext
+    participant Preload as electronAPI
+    participant IPC as IPC Main (setupIpcHandlers)
+    participant UC as AppUseCases
+    participant Repo as PrismaReservationRepository
+    participant DB as SQLite DB
+
+    Admin->>UI: 대시보드 화면 진입
+    activate UI
+    UI->>Context: useReservations() — 전역 상태 구독
+    activate Context
+    Context->>Preload: invoke('reservation:list')
+    activate Preload
+    Preload->>IPC: IPC 채널 전송
+    activate IPC
+    IPC->>UC: listReservations()
+    activate UC
+    UC->>Repo: findAll()
+    activate Repo
+    Repo->>DB: prisma.reservation.findMany()
+    activate DB
+    DB-->>Repo: Reservation[] 반환
+    deactivate DB
+    Repo-->>UC: Reservation[] 반환
+    deactivate Repo
+    UC-->>IPC: 결과 반환
+    deactivate UC
+    IPC-->>Preload: { success: true, data: Reservation[] }
+    deactivate IPC
+    Preload-->>Context: Promise Resolve
+    deactivate Preload
+    Context-->>UI: 전역 예약 상태(reservations) 업데이트
+    deactivate Context
+    UI->>UI: 6주간 달력 그리드 렌더링 + 날짜별 예약 건수 뱃지 오버레이
+
+    Note over Admin,UI: 마우스 휠 스크롤 (50ms 스로틀) → ±7일 주간 이동
+    Note over Admin,UI: 연/월 클릭 → input[type=month] 팝업으로 날짜 즉시 이동
+
+    Admin->>UI: 특정 날짜 슬롯 클릭
+    UI-->>Admin: 일자별 예약 시간표(Timetable) 모달 팝업 출력
+    Note over UI: 세로: 09:00~20:00 (30분 단위)\n가로: 카테고리 내 활성 자원 + 삭제된 자원 (삭제됨) 뱃지 포함
+    UI-->>Admin: 예약 블록이 그리드 좌표에 매핑 렌더링
+    deactivate UI

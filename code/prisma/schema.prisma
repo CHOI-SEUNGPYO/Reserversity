@@ -1,0 +1,67 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  studentId    String   @id
+  name         String
+  penalty      Penalty?
+}
+
+model Penalty {
+  id        String   @id @default(uuid())
+  name      String
+  studentId String   @unique
+  reason    String
+  endDate   String
+  user      User?    @relation(fields: [studentId], references: [studentId])
+}
+
+model Category {
+  id          Int        @id @default(autoincrement())
+  name        String     @unique
+  description String?
+  resources   Resource[]
+}
+
+model Resource {
+  id           Int           @id @default(autoincrement())
+  name         String
+  status       String        @default("AVAILABLE")
+  categoryId   Int
+  category     Category      @relation(fields: [categoryId], references: [id])
+  reservations Reservation[]
+  customFields String?
+
+  @@unique([categoryId, name])
+}
+
+model Reservation {
+  id           String   @id @default(uuid())
+  groupId      String?
+  dateStr      String
+  startHour    Float
+  endHour      Float
+  title        String
+  author       String
+  authorId     String?
+  approver     String
+  status       String   @default("CONFIRMED")
+  color        String
+  remarks      String
+  category     String
+  
+  resourceName String
+  resourceId   Int?
+  resource     Resource? @relation(fields: [resourceId], references: [id])
+}

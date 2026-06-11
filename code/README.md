@@ -55,7 +55,7 @@ npm run build:app
 
 ### 배포 시 주의사항
 
-- **`release/Reserversity.exe` 파일만 전달**하세요. `win-unpacked` 폴더를 압축해서 전달하면 안 됩니다.
+- **`release/Reserversity 0.0.0.exe` 파일만 전달**하세요. `win-unpacked` 폴더를 압축해서 전달하면 안 됩니다.
 - 수신자가 zip에서 압축 해제했다면, exe 파일 **우클릭 → 속성 → "차단 해제" 체크 → 확인** 후 실행하세요.
 
 ---
